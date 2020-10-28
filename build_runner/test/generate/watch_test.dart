@@ -790,7 +790,7 @@ Future<BuildState> startWatch(List<BuilderApplication> builders,
     Map<String, BuildConfig> overrideBuildConfig,
     void Function(LogRecord) onLog,
     Level logLevel = Level.OFF,
-    String configKey}) async {
+    String configKey}) {
   onLog ??= (_) {};
   inputs.forEach((serializedId, contents) {
     writer.writeAsString(makeAssetId(serializedId), contents);
@@ -801,7 +801,7 @@ Future<BuildState> startWatch(List<BuilderApplication> builders,
       rootPackage: packageGraph.root.name);
   final watcherFactory = (String path) => FakeWatcher(path);
 
-  var state = await watch_impl.watch(builders,
+  return watch_impl.watch(builders,
       configKey: configKey,
       deleteFilesByDefault: true,
       debounceDelay: _debounceDelay,
@@ -814,9 +814,6 @@ Future<BuildState> startWatch(List<BuilderApplication> builders,
       logLevel: logLevel,
       onLog: onLog,
       skipBuildScriptCheck: true);
-  // Some tests need access to `reader` so we expose it through an expando.
-  _readerForState[state] = reader;
-  return state;
 }
 
 /// Tells the program to stop watching files and terminate.
@@ -835,7 +832,3 @@ const _packageConfig = {
     {'name': 'a', 'rootUri': 'file://fake/pkg/path', 'packageUri': 'lib/'},
   ],
 };
-
-/// Store the private in memory asset reader for a given [BuildState] object
-/// here so we can get access to it.
-final _readerForState = Expando<InMemoryRunnerAssetReader>();
