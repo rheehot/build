@@ -1,8 +1,8 @@
 ## 1.10.5
 
-- Better handle the case where the package config file is deleted while
-  the watcher is running, by waiting for up to 1 second for it to be written
-  again before failing.
+- Fix a race condition when the package config file is deleted while the
+  watcher is running, eagerly exit whenever the file changes instead of trying
+  to compare digests (it will always change anyways).
 
 ## 1.10.4
 

@@ -414,40 +414,6 @@ a:file://different/fake/pkg/path
                 'please restart the build.'));
       });
 
-      test('Gives the package config a chance to be re-written before failing',
-          () async {
-        var logs = <LogRecord>[];
-        var buildState = await startWatch(
-            [copyABuildApplication], {'a|web/a.txt': 'a'}, writer,
-            logLevel: Level.SEVERE, onLog: logs.add);
-        buildState.buildResults.handleError((e, s) => print('$e\n$s'));
-        buildState.buildResults.listen(print);
-        var results = StreamQueue(buildState.buildResults);
-
-        var result = await results.next;
-        checkBuild(result, outputs: {'a|web/a.txt.copy': 'a'}, writer: writer);
-
-        await writer.delete(packageConfigId);
-
-        // Wait for it to try reading the file twice to ensure it will retry.
-        await _readerForState[buildState]
-            .onCanRead
-            .where((id) => id == packageConfigId)
-            .take(2)
-            .drain();
-
-        var newConfig = Map.of(_packageConfig);
-        newConfig['extra'] = 'stuff';
-        await writer.writeAsString(packageConfigId, jsonEncode(newConfig));
-
-        expect(await results.hasNext, isFalse);
-        expect(logs, hasLength(1));
-        expect(
-            logs.first.message,
-            contains('Terminating builds due to package graph update, '
-                'please restart the build.'));
-      });
-
       group('build.yaml', () {
         final packageGraph = buildPackageGraph({
           rootPackage('a', path: path.absolute('a')): ['b'],

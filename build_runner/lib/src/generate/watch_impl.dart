@@ -15,7 +15,6 @@ import 'package:build_runner/src/watcher/node_watcher.dart';
 import 'package:build_runner_core/build_runner_core.dart';
 import 'package:build_runner_core/src/asset_graph/graph.dart';
 import 'package:build_runner_core/src/generate/build_impl.dart';
-import 'package:crypto/crypto.dart';
 import 'package:logging/logging.dart';
 import 'package:pedantic/pedantic.dart';
 import 'package:stream_transform/stream_transform.dart';
@@ -243,8 +242,6 @@ class WatchImpl implements BuildState {
       _logger.info('Terminating. No further builds will be scheduled\n');
     });
 
-    Digest originalRootPackagesDigest;
-    Digest originalRootPackageConfigDigest;
     final rootPackagesId = AssetId(packageGraph.root.name, '.packages');
     final rootPackageConfigId =
         AssetId(packageGraph.root.name, '.dart_tool/package_config.json');
@@ -261,26 +258,12 @@ class WatchImpl implements BuildState {
           if (firstBuildCompleter.isCompleted) return change;
           return firstBuildCompleter.future.then((_) => change);
         })
-        .asyncMap<AssetChange>((change) {
+        .map<AssetChange>((change) {
           var id = change.id;
           if (id == rootPackagesId || id == rootPackageConfigId) {
-            var digest = id == rootPackagesId
-                ? originalRootPackagesDigest
-                : originalRootPackageConfigDigest;
-            assert(digest != null);
-            // Kill future builds if the root packages file changes.
-            //
-            // We retry the reads for a little bit to handle the case where a
-            // user runs `pub get` and it hasn't been re-written yet.
-            return _readOnceExists(id, watcherEnvironment.reader).then((bytes) {
-              if (md5.convert(bytes) != digest) {
-                _terminateCompleter.complete();
-                _logger
-                    .severe('Terminating builds due to package graph update, '
-                        'please restart the build.');
-              }
-              return change;
-            });
+            _terminateCompleter.complete();
+            _logger.severe('Terminating builds due to package graph update, '
+                'please restart the build.');
           } else if (_isBuildYaml(id) ||
               _isConfiguredBuildYaml(id) ||
               _isPackageBuildYamlOverride(id)) {
@@ -325,11 +308,6 @@ class WatchImpl implements BuildState {
     () async {
       await logTimedAsync(_logger, 'Waiting for all file watchers to be ready',
           () => graphWatcher.ready);
-      originalRootPackagesDigest = md5
-          .convert(await watcherEnvironment.reader.readAsBytes(rootPackagesId));
-      originalRootPackageConfigDigest = md5.convert(
-          await watcherEnvironment.reader.readAsBytes(rootPackageConfigId));
-
       BuildResult firstBuild;
       try {
         _build = await BuildImpl.create(
@@ -368,21 +346,4 @@ class WatchImpl implements BuildState {
       id.package == packageGraph.root.name &&
       id.path.contains(_packageBuildYamlRegexp);
   final _packageBuildYamlRegexp = RegExp(r'^[a-z0-9_]+\.build\.yaml$');
-}
-
-/// Reads [id] using [reader], waiting for it to exist for up to 1 second.
-///
-/// If it still doesn't exist after 1 second then throws an
-/// [AssetNotFoundException].
-Future<List<int>> _readOnceExists(AssetId id, AssetReader reader) async {
-  var watch = Stopwatch()..start();
-  var tryAgain = true;
-  while (tryAgain) {
-    if (await reader.canRead(id)) {
-      return reader.readAsBytes(id);
-    }
-    tryAgain = watch.elapsedMilliseconds < 1000;
-    await Future.delayed(Duration(milliseconds: 100));
-  }
-  throw AssetNotFoundException(id);
 }
